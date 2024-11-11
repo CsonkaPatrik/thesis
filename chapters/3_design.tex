@@ -1,0 +1,71 @@
+\chapter{Tervezés}
+
+\section{Az alkalmazás fejlesztés bemutatása}
+
+Az Androidos alkalmazás, vagyis az e-Horgásznapló egy Android operációs rendszeren futó, adat rögzítésre használatos alkalmazás. Célom az egyszerű, felhasználóbarát kezelőfelület, ahol a lehető legegyszerűbben rögzíteni tudja a horgász a kifogott hal adatait, és a fogás helyszínét.
+Az alkalmazást Android Studio segítségével fogom elkészíteni Kotlin segítségével a könnyebb átláthatóság, és kevesebb boilerplate\cite{boilerplate} kód miatt. Az alkalmazásom a korábban használt Model-View-controller fejlesztési elv helyett az új Model-View-ViewModel architektúrát használja, ezáltal az alkalmazás jövő állóbb.
+
+
+\section{Model-View-ViewModel}
+
+Ahogy az előző szekcióban említettem az alkalmazásom a Model-View-ViewModel architektúrát alkalmazza. Ennek a mintának az a célja, hogy elkülönítse az alkalmazás logikai rétegeit, így egyszerűbb lesz a kód karbantarthatósága, és újra használása. Ebben különösen segítségünkre lesz a nemrég bevezetett Jetpack Compose, ami a régi XML elrendezést hivatott leváltani.
+
+A MVVM-nek\cite{mvvm} három fő része van:
+\begin{itemize}
+    \item Model: Az adatokat, és a logikát tartalmazó réteg.
+    \item View: A felhasználói felület.
+    \item ViewModel: Köztes réteg, ez köti össze a Model-t, és a View-t. Feladata az adatok feldolgozása, és kezelése.
+\end{itemize}
+
+\begin{figure}[h]
+\centering
+\includegraphics[scale=0.6]{images/mvvm2.png}
+\caption{MVVM architektúra diagram}
+\label{fig:mvvm}
+\end{figure}
+
+\subsection{Model}
+
+A Model az alkalmazás adatait és üzleti logikáját tartalmazza. Ide tartoznak az olyan elemek, mint az adatbázisok, a hálózati API-k, vagy a fájlkezelés. A Model réteg az adatforrások elérését és az adatok frissítését biztosítja, de nem tartalmaz semmilyen logikát a felhasználói felülethez.
+
+\subsection{View}
+
+A View az a réteg, amely a felhasználói felületet kezeli. Ez felelős az adatok megjelenítéséért és a felhasználói bevitelek kezeléséért. A View réteg nem tartalmaz logikát az adatok feldolgozására; csak megjeleníti az adatokat, amelyeket a ViewModel szolgáltat számára.
+
+\subsection{ViewModel}
+
+A ViewModel az MVVM minta központi eleme, amely kommunikál a Model és a View között. A ViewModel adatokat kér a Modelltől, feldolgozza azokat, és úgy adja át a View-nak, hogy azok egyből megjeleníthetők legyenek. A ViewModel általában LiveData objektumokat használ, amelyek lehetővé teszik, hogy az adatok automatikusan frissüljenek a View-ban, ha változás történik bennük.
+
+\section{A program felépítése}
+
+A MVVM architektúra kulcsfontosságú szerepet fog betölteni az alkalmazásunkban. Mivel ezen szemlélet alapján kezdem el az alkalmazást, fontos hogy a \textbf{mindsk 21} (minimum Operációs rendszer követelmény) legyen beállítva. Ez jelen esetben az Android 5-ös verziót jelenti. 
+
+A programban egyszerűségre törekszek, hogy minél szélesebb felhasználó közönség igénybe tudja venni a programot. Fontos, hogy intuitív, és letisztult legyen a kezelői felület, a lehető legkevesebb hibalehetőség merüljön fel a User részéről. Ezért a programom felépítését az alábbiak szerint képzelem el:
+
+\begin{figure}[h]
+\centering
+\includegraphics[scale=0.6]{images/userdiagram.png}
+\caption{felhasználói diagram}
+\label{fig:userdiagram}
+\end{figure}
+
+A felhasználó az applikáció megnyitása után a bejelentkezés kijelzőre lesz irányítva, ahol be tud jelentkezni ideális esetben a MOHOSZ-nál regisztrált adataival. Miután ez megtörtént át lesz irányítva a fogási napló oldalra, ahol látni fogja az összes fogását időrendi sorrendben. 
+
+\vspace{1cm}
+
+Ezen a ponton tudja feltölteni a legfrissebb fogását a naplóba, ahol a következőket kell megadnia:
+\begin{itemize}
+    \item Tó neve
+    \item Tó víztérkódja
+    \item Hal neve
+    \item Hal súlya
+\end{itemize}
+
+Ezen a ponton az alkalmazás automatikusan hozzárendeli a \textbf{SystemDate} változót, így elkerülve a különböző csalásokat, későbbi fogás hozzáadásokat a rendszerben. Tehát a felhasználó nem adhatja meg a fogásának az időpontját.
+
+A fogás rögzítése után a rendszer hozzárendeli az adatbázishoz az éppen létrejött adatokat, és sorrend szerint legfelülre rakja. Itt megtekinthetjük a frissen hozzá adott fogást a régebben hozzáadotakkal együtt.
+
+Ezen a ponton felmerülhet egy kérdés, hogy mi a helyzet akkor, hogyha úgy döntött egyik horgásztársunk, hogy a vízpartra mindenféle okos eszköz érkezik meg?
+Itt jön szóba a fiók oldal, ahol ezt a problémát lenne érdemes orvosolni.
+
+A fogási napló tetején egy \textbf{TopBar} változóval hozzárendelünk egy gombot, ami átvezet minket a fiók fülre, ahol megtekinthetjük az éppen bejelentkezett egyént, és felkínáljuk a lehetőséget a kijelentkezésre. Ezen a ponton az alkalmazás vissza vezet minket a bejelentkezés fülre, ahol sport társunk bejelentkezhet saját fiókjával, és nyomon követheti, illetve naplózhatja fogásait.

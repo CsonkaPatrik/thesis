@@ -61,11 +61,63 @@ Ezen a ponton tudja feltölteni a legfrissebb fogását a naplóba, ahol a köve
     \item Hal súlya
 \end{itemize}
 
-Ezen a ponton az alkalmazás automatikusan hozzárendeli a \textbf{SystemDate} változót, így elkerülve a különböző csalásokat, későbbi fogás hozzáadásokat a rendszerben. Tehát a felhasználó nem adhatja meg a fogásának az időpontját.
+Ezután az alkalmazás automatikusan hozzárendeli a \textbf{SystemDate} változót, így elkerülve a különböző csalásokat, későbbi fogás hozzáadásokat a rendszerben. Tehát a felhasználó nem adhatja meg a fogásának az időpontját.
 
 A fogás rögzítése után a rendszer hozzárendeli az adatbázishoz az éppen létrejött adatokat, és sorrend szerint legfelülre rakja. Itt megtekinthetjük a frissen hozzá adott fogást a régebben hozzáadotakkal együtt.
 
 Ezen a ponton felmerülhet egy kérdés, hogy mi a helyzet akkor, hogyha úgy döntött egyik horgásztársunk, hogy a vízpartra mindenféle okos eszköz érkezik meg?
 Itt jön szóba a fiók oldal, ahol ezt a problémát lenne érdemes orvosolni.
 
-A fogási napló tetején egy \textbf{TopBar} változóval hozzárendelünk egy gombot, ami átvezet minket a fiók fülre, ahol megtekinthetjük az éppen bejelentkezett egyént, és felkínáljuk a lehetőséget a kijelentkezésre. Ezen a ponton az alkalmazás vissza vezet minket a bejelentkezés fülre, ahol sport társunk bejelentkezhet saját fiókjával, és nyomon követheti, illetve naplózhatja fogásait.
+A fogási napló tetején egy \textbf{TopBar} változóval hozzárendelünk egy gombot, ami átvezet minket a fiók fülre, ahol megtekinthetjük az éppen bejelentkezett egyént, és felkínáljuk a lehetőséget a kijelentkezésre. Ezután az alkalmazás vissza vezet minket a bejelentkezés fülre, ahol sport társunk bejelentkezhet saját fiókjával, és nyomon követheti, illetve naplózhatja fogásait.
+
+\subsection{Bejelentkezés}
+
+Előszöri belépésnél a felhasználónak megoldást kell kínálni a bejelentkezéshez, amit nem lehet fél vállról venni. Minden alkalmazásban megadott adat szenzitív, alapos körültekintéssel kell ezeket kezelni. Mivel fejlesztő környezetnek az Android Studio-t választottam a különböző Google által fejlesztett API-k könnyen integrálhatóak az alkalmazásba. Ezt kihasználva hosszas tanakodás után a Firebase tűnik a legmegfelelőbb választásnak. 
+
+A Firebase felhőszolgáltatást nyújt nekünk kölünböző előre létrehozott API-kal, amik gördülékenyebbé teszik az alkalmazás fejlesztés ezen szakaszát. Természetesen a bejelentkezésre is nyújt egy külön megoldást, aminek a neve \textbf{Firebase Authentication}\cite{firebaseauthentication}. Ezzel az API-val dolgozva csak meg kell adnunk a bejelentkezés típusát, és máris neki állhatunk az alkalmazásba való beépítésnek. Itt fontos megemlíteni, hogy ez a szolgáltatás nem teljesen ingyenes, csak egy bizonyos erőforrás kapacitás használatáig, azonban a mi esetünkben az alkalmazás méretét tekintve nem befolyásoló tényező.
+
+A bejelentkezés a Firebase integrációja után így nézne ki:
+\begin{itemize}
+    \item E-mail beviteli mező
+    \item Jelszó beviteli mező
+    \item Bejelentkezés gomb
+\end{itemize}
+
+A bejelentkezés gomb megnyomása után ellenőrizni tudjuk, hogy a felhasználó által, vagy általunk által megadott bejelentkezési információk megegyeznek-e az adatbazisban szereplő értékekkel. 
+
+\begin{figure}[h]
+\centering
+\includegraphics[scale=1]{images/login.png}
+\caption{A bejelentkezés panel egy elképzelt változata.}
+\label{fig:loginpanel}
+\end{figure}
+
+\subsection{A fogási napló}
+
+Mituán bejelentkezett a User szeretném, ha egyből a fogási napló oldalon találná magát. 
+Az alkalmazás elemi része továbbra is az egyszerűség, így a könnyű felhasználást szeretném ezzel elősegíteni. Mivel itt adatokat fogunk tárolni szükségünk van valamilyen adatbázisra.
+Erre a célra az Android studio-ban integrált \textbf{Room}\cite{room} adatbázist fogom használni, ami egyszerűen lokálisan tárolja a felhasználó által feltölteni kívánt adatokat.
+Ezen a ponton szeretném, ha sima felsorolás nézetben megtudja tekinteni a felhasználó az eddigi fogásait az alábba szempontok szerint:
+\begin{itemize}
+    \item Fogás időpontja
+    \item Fogás helye
+    \item A tó víztérkódja
+    \item Hal típusa
+    \item Hal súlya
+\end{itemize}
+
+A képernyő jobb alsó sarkában ésszerű lenne egy \textbf{FloatingActionButton}, ami az adatfelvitel \textbf{Dialog}-ra vezetne át minket, ahol feltölthetjük az adatainkat.
+
+A fogás időpontja a korábban említett \textbf{Systemdate} változó lenne, amit nem tudunk megváltoztatni, mindig a fogás rögzítésének ideje szerepel.
+A fogás helye természetesen a tó neve lenne, ami egy \textbf{String} változó, itt begépelhetjük az éppen kikapcsolódás céljával használatba vett vizet.
+A tó víztérkódja nem elfelejthető adat, ez \textbf{Int} változó lenne.
+A hal típusa, pontosítva a hal neve egy \textbf{String} változó lenne, ahogy megadhatjuk a fogott halunk nevét.
+Végül a hal súlya értelemszerűen a mérlegelés után megállapított szám avagy \textbf{Int}, kilogramm-ban.
+
+\subsection{Fiók}
+
+Az utolsó szekció a fiók oldal, ami azt szolgálná, hogy a felhasználó ki tudjon jelentkezni az alkalmazásból, lehetőséget biztosítva egy másik fiók bejelentkezésére, vagy ugyanazzal az adatokkal való vissza-jelentkezésre.
+
+Itt biztosítani kell a felhasználónak egy kijelentkezés gombot, amivel kijelentkezik a fiókjából, és visszatér a bejelentkezés oldalra. 
+
+Továbbá egy másik lehetőséget is érdemes felkinálni a felhasználónak, ahol visszatud térni a fogási napló oldalra.

@@ -407,7 +407,7 @@ OutlinedTextField(
             contentDescription = "Email") }
         )
 \end{java}
-
+\newpage
 \begin{itemize}
     \item \texttt{Button}: Értelemszerűen a bejelentkezési gomb, egyben az utolsó elem a 
     \newline
@@ -415,7 +415,6 @@ OutlinedTextField(
     Ez a függvény megpróbálja bejelentkeztetni a felhasználót a korábban megadott adatok alapján. Ha a bejelentkezés sikeres a ViewModel segítségével meghívjuk az \texttt{openAndPopUp}-ot, amely átnavigál minket a CatchLogScreen-re.
 \end{itemize}
 
-\newpage
 
 \begin{java}[caption = {A Button szemléltetése.}]
 Button(
@@ -430,4 +429,411 @@ Button(
             modifier = modifier.padding(0.dp, 6.dp)
         )
     }
+\end{java}
+
+\begin{figure} [h]
+    \centering
+    \includegraphics[width=0.5\linewidth]{images/login.png}
+    \caption{Az elkészült Login panel.}
+    \label{fig:finishedlogin}
+\end{figure}
+
+\section{OnlineCatchLog}
+
+Ebben a szekcióban is a Model részletezésével kezdeném. Itt részletezni fogom a háttérfolyamatokat, amik lehetővé teszik az adatbázisom működését.
+\subsection{Model}
+\begin{itemize}
+    \item \texttt{CatchLogDao}: A \textbf{@Dao} annotációval ellátott CatchLogDao egy Data Acces Object\cite{dao}, amely az adatbázisom műveleteit kezeli. Itt látjuk a metódusokat, amelyen keresztül kommunikálunk a Room adatbázissal.
+    
+\newpage
+    
+    \begin{java}[ caption = {CatchLogDao.kt részlet.}]
+    @Dao
+    interface CatchLogDao{
+    
+    }
+    \end{java}
+    \begin{itemize}
+        \item \texttt{@Upsert}: Ez a metódus felelős azért, hogy egy új fogást rögzítsünk az adatbázisban. Másodlagosan ellenőrzi a meglévő rekordokat is.
+\begin{java}
+@Upsert
+fun upsertCatchLog(catchLog: CatchLog)
+\end{java}
+        \item \texttt{@Query}: Az alábbi lekérdezéssel elérjük az összes eddig felvitt fogást az adatbázisban. Fontos, hogy ez a lekérdezés időrendi sorrendben valósul meg, azaz mindig a legfrissebb fogás lesz legfelül.
+\begin{java}
+@Query("SELECT * FROM catchlog ORDER BY catchTime ASC")
+fun getLogsOrderedByTime(): Flow<List<CatchLog>>
+\end{java}
+    \end{itemize}
+
+    \item \texttt{CatchLogEvent}: Ez a zárt interfész tartalmazza az eseményeket, amelyet az alkalmazás különböző részei felhasználhatnak az események kezelésére.
+    Minden esemény külön adat osztályként, vagy objektumként van. Ezekkel tudunk az eseményekre reagálni.
+    \begin{itemize}
+        \item A \texttt{SaveCatchLog} esemény akkor hasznos, amikor frissen el szeretnénk menteni egy új kitöltött fogást.
+        \item A \texttt{setLakeName, setLakeCode, setFishName, set FishWeight} pedig az adatmezőket frissítik.
+        \item A \texttt{ShowDialog} illetve \texttt{HideDialog} a fogás felvitelét elindító folyamat részei. Amikor a képernyőn rá kattintunk az új fogás felvitelére ezen eseményekkel dolgozunk.
+        \item A \texttt{SortLogs} eseménnyel pedig beállíthatjuk az adatbázis lekérdezésének típusát, sorrendjét.
+        
+\begin{java}[caption = { A CatchLogEvent eseményei. }]
+sealed interface CatchLogEvent {
+object SaveCatchLog
+data class setLakeName(val lakeName: String)
+data class setLakeCode(val lakeCode: Int)
+data class setFishName(val fishName: String)
+data class setFishWeight(val fishWeight: Int)
+object ShowDialog
+object HideDialog
+data class SortLogs(val sortType: SortType)
+}
+\end{java}
+    \end{itemize}
+    \item \texttt{CatchLogDataBase}: Ezen a ponton viztosítjuk a Room adatbázis konfigurcióját.
+    Először a \textbf{@Database} annotációval létrehozzuk az adatbázist. Ennek a feladata, hogy kezelje a CatchLog entitásokat, azaz a felvinni kívánt fogásokat. Ez az entitás magában foglalja a korábban említett adatokat, azaz a tó nevét, víztérkódját, hal nevét, súlyát, és a fogás időpontját. Ebben az osztályban továbbá megtalálható egy metódus, az \texttt{abstract val dao: CatchLogDao}. Ez biztosítja a hozzáférést a korábban említett \texttt{CatchLogDao} interfészhez, amellyel az alkalmazás a műveleteket fogja végrehajtani az adatbázison.
+
+\begin{java}[caption = {CatchLogDataBase osztálya.}]
+    @Database(
+    entities = [CatchLog::class],
+    version = 1
+)
+abstract class CatchLogDataBase: RoomDatabase() {
+    abstract val dao: CatchLogDao
+}
+\end{java}
+    \item \texttt{DataBaseModule}: Ez egy Dagger Hilt modul, amely biztosítja az adatbázist az egész alkalmazás számára. Itt részletezni szeretném a különböző komponenseket:
+    \begin{itemize}
+        \item \texttt{@Module} és \texttt{@InstallIn(SingletonComponent::class)} annotációk biztosítják azt, hogy a \texttt{DatabaseModule} globális függőségekkel segítse az alkalmazás többi elemét, és hogy hozzáférhező legyen az alkalmazás futása alatt.
+        
+\begin{java}[caption = {DataBaseModul-ban szereplő annotációk.}]
+@Module
+@InstallIn(SingletonComponent::class)
+\end{java}
+
+        \item \texttt{@Provides}: Ez a függőség segít létrehozni az adatbázist, amelyet később az alkalmazás az futása alatt használhat. Itt sajnos használnom kellett a \texttt{allowMainThreadQueries} metódust, ugyanis másképpen hibát produkált az alkalmazás. Ezt a későbbiekben fontos lenne kiküszöbölni, ugyanis az adatbázis így a fő processzor szálakon fut, ami a teljesítményünket negatív irányba eltolja. Ideális esetben ez a folyamat a háttérszálakon futna.
+\begin{java}[caption = {provideCatchLogDataBase függőség.}]
+@Provides
+fun provideCatchLogDatabase(
+@ApplicationContext context: Context):
+CatchLogDataBase {
+    return Room.databaseBuilder(
+        context,
+        CatchLogDataBase::class.java,
+        "catch_log_database"
+    ).allowMainThreadQueries().build()
+}
+\end{java}
+        \item A \texttt{provieCatchLogDao} pedig elérhetővé teszi az alkalmazás többi részének az \texttt{CatchLogDao}-hoz való szükséges hozzáféréseket.
+\begin{java}
+@Provides
+    fun provideCatchLogDao(
+    database: CatchLogDataBase): CatchLogDao {
+        return database.dao
+    }
+\end{java}
+    \end{itemize}
+    \item Végezetül pedig van egy egyszerű enum típusunk, a \texttt{SortType}. Ebben az Enum-ban deklarálhatunk új rendezési típusokat, ez jelen esetben csak az idő alapú Sort, azonban ez később könnyen bővíthető köszönhetően a felépítésnek.
+\end{itemize}
+
+\subsection{CatchLogViewModel}
+
+Itt a programkód elején 2 fontos annotáció található. Az egyik a \texttt{@OptIn}, amellyel lehtővé tesszük az alkalmazás számára, hogy kísérleti fázisban lévő funkciókat használjunk. Ez ebben az esetben a \texttt{flatMapLatest}, és a \texttt{stateIn}. Ezek a funkciók az adat áramlásra, és az állapotkezelésre vonatkoznak.
+
+A másik a \texttt{@HiltViewModel és @Inject}. Ezekről szó esett már korábban is, itt azonban más függőségeket injektálunk. Ezen a ponton a \texttt{Dao}-ot, ami egy adathozzáférési objetum a \texttt{CatchLogDao}-ban. Ezzel a művelettel közvetlen hozzá tud férni az adatbázis az előbbi programkódban leírt műveletekhez.
+
+\begin{java}[caption = {Annotációk szemléletése.}]
+@OptIn(ExperimentalCoroutinesApi::class)
+@HiltViewModel    
+\end{java}
+
+Hasonlóan a korábbi ViewModel-ekhez itt is van egy \texttt{onAccountClick} metódus, amely egy másik kijelzőre hivatott átirányítani minket az \texttt{openAndPopUp} segítségével.
+
+Ezután a ViewModel-ben kettő állapotáramlást kell létrehoznunk, a \texttt{\textunderscore sortType és \textunderscore cathLogs}-ot.
+Ezekkel fogjuk kezelni a fogások listáját, valamint a korábban létrehozott rendezési sorrendet.
+\begin{itemize}
+    \item \texttt{\textunderscore sortType}: Ez egy \textbf{MutableStateFlow}, amely az aktuális rendezési típust tárolja. Ez estünkben a TIME, azaz idő szerinti sorolás.
+    \item \texttt{\textunderscore catchLogs}: Ez pedig egy \textbf{StateFlow}, ami a \textbf{\textunderscore sortType} flow változásaira reagál. Ha hozzáadunk többféle rendezési típust az alkalmazásunkhoz, akkor a \textbf{flatMapLatest} segítségével egy újabb lekérdezést valósíthatunk meg.
+
+\newpage
+
+\begin{java}[caption = {A különböző Flow típusok szemléltetése.}]
+private val _sortType = MutableStateFlow(SortType.TIME)
+private val _catchLogs = _sortType
+    .flatMapLatest { sortType ->
+        when(sortType) {
+            SortType.TIME -> dao.getLogsOrderedByTime()
+        }
+    }
+    .stateIn(viewModelScope,
+    SharingStarted.WhileSubscribed(), emptyList())
+    
+\end{java}
+\end{itemize}
+
+ A state kombinálja a \textunderscore state, \textunderscore sortType, \textunderscore catchLogs flow-kat.
+ \begin{itemize}
+     \item \texttt{combine}: Ez a flow figyeli mindhárom áramlás aktuális állapotát. Ha bármelyikük megváltozik a state frissül.
+     \item \texttt{stateIn}: Ez a metódus biztosítja azt, hogy a state állapotáramlása a ViewModel használatához legyen kötve, ezáltal mindig elérhető marad. Tehát amíg használjuk ezt a kijelzőt, addig fog működni. Miután nem használja az alkalmazás 5 másodpercig, a stateIn megszűnik.
+
+\begin{java} [caption = {A combine szemléltetése.}]
+private val _state = MutableStateFlow(CatchLogState())
+val state = combine(_state, _sortType, _catchLogs)
+    { state, sortType, catchLogs ->
+    state.copy(
+        catchLogs = catchLogs,
+        sortType = sortType
+    )
+}.stateIn(viewModelScope,
+SharingStarted.WhileSubscribed(5000),
+CatchLogState())
+
+\end{java}
+\end{itemize}
+
+Ezen a ponton jutunk el, az \textbf{onEvent()}-re. Ez a metódus kezelei a fogási napló eseményeket, amelyek különböző felhasználói tevékenységeket jelznek. Itt egy \texttt{when} ággal dolgozunk, és minden különböző eseménytípusnál különböző műveletet hajtunk végre.
+\begin{itemize}
+    \item \texttt{Hide-ShowCatalog}: Ez a korábban említett függvény végzi a dialógus előhozatalát, és elrakását. Ezt abban az esetben hívjuk meg ha a felhasználó új adatot akar felvinni a táblázatba, azaz naplózni szeretné a fogását. Abban az esetben pedig elrejtjük, ha feltöltött egy fogást, vagy félbe hagyja a fogás feltöltését.
+    \item A \texttt{set} előváltozóval ellátott események felelősek azért, hogy az állapotot frissítsék az új mező értékével. Azaz amit leírunk, azt lássuk is.
+\begin{java}
+is CatchLogEvent.setFishWeight -> {
+    _state.update { 
+        it.copy(fishWeight = event.fishWeight) }
+}
+\end{java}
+
+    \item \texttt{SaveCatchLog}: Ez az az esemény, amely a formában lévő adatokat sikeresen kitöltés esetés lementi. Ebből adódóan először ellenőrzi, hogy a \texttt{lakeName, fishName} helyesek-e, illetve hogy meg legyenek adva.
+\begin{java}
+CatchLogEvent.SaveCatchLog -> {
+            val lakeName = state.value.lakeName
+            val lakeCode = state.value.lakeCode
+            val fishName = state.value.fishName
+            val fishWeight = state.value.fishWeight
+
+            if(lakeName.isBlank() || fishName.isBlank()) {
+                return
+            }
+        }
+\end{java}
+
+    Ha az előfeltételek teljesültek, azaz helyesek az adatok és nem hagytunk üresen mezőt, akkor létrehoz egy \textbf{CatchLog} objektumot, és aszinkron módba lementi a korábban létrehozott \texttt{dao.upsertCatchLog} segítségével.
+\begin{java}
+viewModelScope.launch {
+        dao.upsertCatchLog(catchLog)
+        }
+\end{java}
+    Ezek után kiüríti az előbb használt mezőket, majd eltünteti a dialógust.
+\end{itemize}
+
+\subsection{OnlineCatchLogView}
+
+Ezen a ponton elérkeztünk a CatchLog szakasz View komponenséhez. A korábban tárgyalt metódusokra csak említés szinjtén szeretnék kitérni, az újakat pedig részletezem.
+
+\begin{itemize}
+    \item \textbf{Scaffold:} Ez a Column-tól eltérően egy általános elrendezési eljárás. Itt csak egy alapvető struktúrát biztosítunk az alkalmazásnak, amin keresztül meg tud jeleníteni. Ezen belül találunk egy \texttt{topBar}-t, ami a kijelző felső részén egy sávot hoz létre, amit szabadon testreszabhatunk. A következő deklaráció a 
+    \newline
+    \texttt{floatingActionButton}, ami a kijelző alján egy "lebegő" gombot hoz létre, amivel interaktálhatunk.
+\begin{figure} [h]
+\centering
+\includegraphics[width=0.5\linewidth]{images/floatingactionbutton.png}
+\caption{A "lebegő" gomb.}
+\label{fig:floatingactionbutton}
+\end{figure}
+\newpage
+
+\begin{java} [caption = { A topBar szemléltetése.}]
+topBar = {
+    TopAppBar(
+    title = { Text(stringResource(R.string.app_name)) },
+    actions = {
+        IconButton(onClick = {
+            viewModel.onAccountClick(openAndPopUp) }) {
+            Icon(Icons.Filled.AccountCircle,
+                "Account")
+            }
+        }
+    )
+} 
+\end{java}
+Ezen belül láthatjuk, hogyan is épül fel a \texttt{topBar}.
+Tudunk neki nevet adni a \textbf{title} változó segítségével, ami a korábban említett \textbf{Stringek} közül kerül kiválasztásra, amit már előre megírtunk.
+Egyel lejebb az \textbf{actions}-nél itt is észrevehetjük, hogy az \texttt{openAndPopUp} metódust hívjuk meg. Ez azért van, mert egy gomb található ebben a szekcióban, amivel átirányítjuk a felhasználót az \textbf{Account} oldalra. végezetül pedig a kattintható gombnak adunk egy ikont.
+
+\begin{java} [caption = {A lebegő gomb programbeli megvalósítása.}]
+ floatingActionButton = {
+    FloatingActionButton(onClick = {
+         onEvent(CatchLogEvent.ShowDialog)
+    }) {
+        Icon(
+            imageVector = Icons.Default.Add,
+            contentDescription = "Fogas"
+        )
+    }
+}
+\end{java}
+
+A \texttt{floatingActionButton}-nál hasonló a helyzet. Itt azonban nem irányítjuk át a felhasználót egy másik oldalra, hanem felkinálunk neki egy dialógust, ugyanis ezzel a gombbal lehet megnyitni az adatfeltöltést. Itt beállítjuk a gomb ikonját, ami a mi esetünkben egy \textbf{+} jel lesz. Ezzel is törekszünk alkalmazásunk intuivitásának fenntartására.
+
+\item \textbf{LazyColumn}: Ez a sima Column-tól eltérően csak akkor tölti be az elemeket, ha megjelennek a képernyőn. Ez abból a szempontból fontos, hogy valószínű a felhasználónak nem 2-3 feltöltött fogása lesz, hanem valószínű több száz. Így erőforrásokat spórolhatunk, mivel nem töltjük be az összes fogást egyszerre.
+
+Láthatjuk, hogy a betöltés csak egyszer szerepel. Ez annyiszor fut le, ahány fogást be kell töltenie az alkalmazásnak. A fontosabb információk nagyobb betűmérettel rendelkeznek, még a kevésbé fontosak, (például: víztérkód) kevésbé látszanak. Ezzel azt próbáljuk elősegíteni, hogy jobban átláthatóbb legyen a kezelői felület.
+\end{itemize}
+
+\newpage
+
+\subsection{AddLogDialog}
+
+Az AddLogDialog majdnem egy külön komponenst képez. Ide leszünk át irányítva a lebegő gomb megnyomása után. Közvetlenül nem egy új ablak, hanem egy dialógus. Nézzük meg részletesebben.
+
+ \texttt{AlertDialog}: Ez biztosítja a felugró ablakot. Három fő része van. Az első az onDissmissRequest, ahol meghatározzuk, hogy mi történjen, amikor a User megkíséreli bezárni a dialógust. Ezután a \texttt{CatchLogEvent.HideDialog} eseménnyel tájékoztatjuk a viewModel-t a dialógus bezárásáról. A második elem a \texttt{title}, amivel értelemszerűen címet adhatunk a dialógusunknak. Ez nálam a "Fogás hozzáadása". A harmadik pedig a \textbf{text}, amellyel Column elrendezésben, azaz egymás alatt megnevezhetjük a beviteli mezők feladatát.
+
+\begin{java}[caption = {Az AlertDialog felépítési váza.}]
+AlertDialog(
+    modifier = modifier,
+    onDismissRequest = {
+        onEvent(CatchLogEvent.HideDialog)
+    },
+    title = { },
+    text = { },
+    buttons = { }
+)
+\end{java}
+
+\texttt{Textfield}: Hasonlóan a bejelentkezési kijelzőhöz, itt is beviteli módként ezeket használom.
+A \texttt{value} a beviteli mező tartalma, ez a \texttt{state.lakeName} alapján frissül.
+Az \texttt{onValueChange} lényege, hogy ha a felhasználó bevisz egy adatot, akkor a \texttt{CatchLogEvent.setLakeName} hívjuk meg, ami frissíti a bevitt adattal az állapotot.
+A \texttt{placeholder} pedig hasonlóan a korábbi példával iránymutatást ad a \texttt{textField} használatával kapcsolatban.
+
+\begin{java}[caption = {A lakeName beviteli mező.}]
+ TextField(
+            value = state.lakeName,
+            onValueChange = {
+                onEvent(CatchLogEvent.setLakeName(it))
+            },
+            placeholder = {
+                Text(text = "To megnevezese")
+            }
+        )    
+\end{java}
+
+Ettől egy részen eltér a víztérkód, és a hal súlya mező. Ugyanis ezeknek a típusa Int, ahol nem lenne ésszerű felkínálni a teljes billentyűzetet a felhasználónak. Ezért a könnyebb bevitelt hivatott elősegíteni a \texttt{KeyboardType.Number}. Ennek a lényege az, hogy a User csak egy numerikus billentyűzetet fog kapni, amivel kifejezetten csak számokat tud bevinni a mezőbe.
+
+\newpage
+
+\begin{java}[caption = {A víztérkód programrészlet szemléltetése.}]
+TextField(
+    value = state.lakeCode.toString(),
+    onValueChange = {
+        val lakeCodeInt = it.toIntOrNull()
+        if (lakeCodeInt != null) {
+            onEvent(CatchLogEvent.setLakeCode(lakeCodeInt))
+        } else { }
+    },
+    placeholder = {
+        Text(text = "Vizterkod")
+    },
+    keyboardOptions = KeyboardOptions(
+        keyboardType = KeyboardType.Number)
+)    
+\end{java}
+
+\section{Account}
+Itt elérkeztünk ennek a fejezet utolsó szekciójához, a fiókhoz. Itt kettő dolgot kellett megvalósítanom. Először is, fontos hogy a felhasználó itt ki tudjon jelentkezni az alkalmazásból. 
+Másodszor pedig fel kellett kínálni egy lehetőséget arra, hogy vissza tudjunk menni a fogási napló részre.
+
+Itt nem részeletném a Model részét a fióknak, ugyanis az a része megegyezik a bejelentkező szekcióval.
+
+\subsection{AccountViewModel}
+
+Az \texttt{initialize} felelős az alkalmazás ujraindításáért miután kijelentkeztetjük a felhasználót.
+Ezen belül található a \texttt{restartApp} függvény, amely vissza küldi a felhasználót a Splash kijelzóre.
+Ebben a blokkban a \texttt{launchCatching}-en belül az
+\newline
+\texttt{accountService.currentUser} folyamatot figyeli. Amint kijelentkeztetjük a felhasználót ez \texttt{null} állapotú lesz. Ezután aktiválódik a \texttt{restartApp}.
+
+\begin{java}
+fun initialize(restartApp: (String) -> Unit) {
+    launchCatching {
+        accountService.currentUser.collect { user ->
+            if (user == null) restartApp(SPLASH_SCREEN)
+        }
+    }
+}
+
+\end{java}
+
+\newpage
+
+Ezután láthatjuk ezen szekció kettő fő függvényét.
+Az első az \texttt{onSignOutClick}. Ez jelentkezteti ki a felhasználót az \texttt{accountService.signOut()} meghívásával.
+
+\begin{java}
+fun onSignOutClick() {
+    launchCatching {
+        accountService.signOut()
+    }
+}
+\end{java}
+
+A második az \texttt{onCatchLogClick}, ami vissza irányítja a felhasználót a fogási napló oldalára, és törli a stack-ből a jelenlegi kijelzőt.
+
+\begin{java}
+fun onCatchLogClick(openAndPopUp: (String, String) -> Unit){
+    launchCatching {
+        openAndPopUp(CATCHLOG_SCREEN, ACCOUNT_SCREEN)
+    }
+}    
+\end{java}
+
+\subsection{AccountView}
+
+Itt a programkód eleje a \texttt{LaunchedEffect}-el kezdődik. Ezen a blokkon belül hívjuk meg a korábban létrehozott\texttt{initialize}-t. Ez biztosítja, hogy ha nincs bejelentkezett felhasználó, akkor vissza kerülönk a bejelentkezés oldalra.
+
+\begin{java}
+LaunchedEffect(Unit) { viewModel.initialize(restartApp) }
+\end{java}
+
+Továbbá létrehozunk a \texttt{showExitAppDialog}-ot, ami \textbf{mutableStateOf(false)} kezdeti értékkel létrehoz egy állapotot. Ez azt fogja jelezni az alkalmazásnak, hogy a kijelentkezési dialógus meg jelenjen-e.
+
+\begin{java}
+var showExitAppDialog by remember { mutableStateOf(false) }
+\end{java}
+
+A \texttt{TopAppBar} változó itt hasonlóan az előző szekcióban említettekkel az
+\newline
+\texttt{openAndPopUp}
+metódussal vissza vezeti a felhasználót az előző oldalra.
+
+\begin{java}
+TopAppBar(
+    title = { Text(stringResource(R.string.app_name)) },
+    actions = {
+        IconButton(onClick = { 
+            viewModel.onCatchLogClick(openAndPopUp) }) {
+            Icon(Icons.Filled.ArrowBack, "Catch log")
+        }
+    }
+)
+\end{java}
+
+A képernyő közepén egy szimpla gomb található, aminek az a feladata, hogy kijelentkeztesse a felhasználót. Amint erre rákattintunk a \texttt{showExitAppDialog} értéke igaz lesz, így megjelenik a dialógusunk.
+\newpage
+A dialógus megjelenítésért az \texttt{AlertDialog} függvény gondoskodik. Itt a felhasználónak kettő opciót ajánlunk fel. Az első opcióban megszakíthatja a kijelentkezés folyamatát, így bent marad az alkalmazásban, és nem kell újra bejelentkeznie. A második opció a kijelentkezés megerősítése. Ebben az esetben a felhasználó vissza lesz irányítva a bejelentkezés oldalra, ahol ismét meg kell adnia az adatait, vagy át adhatja a telefonját és bejelentkezhet a horgásztársa.
+
+\begin{java}
+AlertDialog(
+    title={Text(stringResource(R.string.sign_out_title))},
+    text={Text(stringResource(R.string.sign_out_description))},
+    dismissButton = {
+        Button(onClick = { showExitAppDialog = false }) {
+            Text(text = stringResource(R.string.cancel))
+        }
+    },
+    confirmButton = {
+        Button(onClick = {
+            viewModel.onSignOutClick()
+            showExitAppDialog = false
+        }) {
+            Text(text = stringResource(R.string.sign_out))
+        }
+    },
+    onDismissRequest = { showExitAppDialog = false }
+)
 \end{java}
